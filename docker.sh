@@ -2,8 +2,10 @@
 set -euo pipefail
 
 ARCH=$(uname -m)
-IMAGES="openwebrx-rtlsdr openwebrx-sdrplay openwebrx-hackrf openwebrx-airspy openwebrx-rtlsdr-soapy openwebrx-plutosdr openwebrx-limesdr openwebrx-soapyremote openwebrx-perseus openwebrx-fcdpp openwebrx-radioberry openwebrx-uhd openwebrx-rtltcp openwebrx-runds openwebrx-hpsdr openwebrx-bladerf openwebrx-full openwebrx"
+# IMAGES="openwebrx-rtlsdr openwebrx-sdrplay openwebrx-hackrf openwebrx-airspy openwebrx-rtlsdr-soapy openwebrx-plutosdr openwebrx-limesdr openwebrx-soapyremote openwebrx-perseus openwebrx-fcdpp openwebrx-radioberry openwebrx-uhd openwebrx-rtltcp openwebrx-runds openwebrx-hpsdr openwebrx-bladerf openwebrx-full openwebrx"
+IMAGES="openwebrx-rtlsdr openwebrx-rtlsdr-soapy openwebrx-soapyremote openwebrx-perseus openwebrx-rtltcp openwebrx-full openwebrx"
 ALL_ARCHS="x86_64 armv7l aarch64"
+# ALL_ARCHS="x86_64"
 TAG=${TAG:-"latest"}
 ARCHTAG="${TAG}-${ARCH}"
 
@@ -26,30 +28,30 @@ build () {
     i=${image:10}
     # "openwebrx" is a special image that gets tag-aliased later on
     if [[ ! -z "${i}" ]] ; then
-      docker build --build-arg ARCHTAG=$ARCHTAG -t jketterl/${image}:${ARCHTAG} -f docker/Dockerfiles/Dockerfile-${i} .
+      docker build --build-arg ARCHTAG=$ARCHTAG -t aaapppp/${image}:${ARCHTAG} -f docker/Dockerfiles/Dockerfile-${i} .
     fi
   done
 
   # tag openwebrx alias image
-  docker tag jketterl/openwebrx-full:${ARCHTAG} jketterl/openwebrx:${ARCHTAG}
+  docker tag aaapppp/openwebrx-full:${ARCHTAG} aaapppp/openwebrx:${ARCHTAG}
 }
 
 push () {
   for image in ${IMAGES}; do
-    docker push jketterl/${image}:${ARCHTAG}
+    docker push aaapppp/${image}:${ARCHTAG}
   done
 }
 
 manifest () {
   for image in ${IMAGES}; do
     # there's no docker manifest rm command, and the create --amend does not work, so we have to clean up manually
-    rm -rf "${HOME}/.docker/manifests/docker.io_jketterl_${image}-${TAG}"
+    rm -rf "${HOME}/.docker/manifests/docker.io_aaapppp_${image}-${TAG}"
     IMAGE_LIST=""
     for a in ${ALL_ARCHS}; do
-      IMAGE_LIST="${IMAGE_LIST} jketterl/${image}:${TAG}-${a}"
+      IMAGE_LIST="${IMAGE_LIST} aaapppp/${image}:${TAG}-${a}"
     done
-    docker manifest create jketterl/${image}:${TAG} ${IMAGE_LIST}
-    docker manifest push --purge jketterl/${image}:${TAG}
+    docker manifest create aaapppp/${image}:${TAG} ${IMAGE_LIST}
+    docker manifest push --purge aaapppp/${image}:${TAG}
   done
 }
 
@@ -64,17 +66,17 @@ tag () {
 
   for image in ${IMAGES}; do
     # there's no docker manifest rm command, and the create --amend does not work, so we have to clean up manually
-    rm -rf "${HOME}/.docker/manifests/docker.io_jketterl_${image}-${TARGET_TAG}"
+    rm -rf "${HOME}/.docker/manifests/docker.io_aaapppp_${image}-${TARGET_TAG}"
     IMAGE_LIST=""
     for a in ${ALL_ARCHS}; do
-      docker pull jketterl/${image}:${SRC_TAG}-${a}
-      docker tag jketterl/${image}:${SRC_TAG}-${a} jketterl/${image}:${TARGET_TAG}-${a}
-      docker push jketterl/${image}:${TARGET_TAG}-${a}
-      IMAGE_LIST="${IMAGE_LIST} jketterl/${image}:${TARGET_TAG}-${a}"
+      docker pull aaapppp/${image}:${SRC_TAG}-${a}
+      docker tag aaapppp/${image}:${SRC_TAG}-${a} aaapppp/${image}:${TARGET_TAG}-${a}
+      docker push aaapppp/${image}:${TARGET_TAG}-${a}
+      IMAGE_LIST="${IMAGE_LIST} aaapppp/${image}:${TARGET_TAG}-${a}"
     done
-    docker manifest create jketterl/${image}:${TARGET_TAG} ${IMAGE_LIST}
-    docker manifest push --purge jketterl/${image}:${TARGET_TAG}
-    docker pull jketterl/${image}:${TARGET_TAG}
+    docker manifest create aaapppp/${image}:${TARGET_TAG} ${IMAGE_LIST}
+    docker manifest push --purge aaapppp/${image}:${TARGET_TAG}
+    docker pull aaapppp/${image}:${TARGET_TAG}
   done
 }
 
