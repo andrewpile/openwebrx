@@ -28,6 +28,7 @@ COPY docker/scripts/install-dependencies-*.sh \
 
 RUN /install-dependencies-rtlsdr.sh &&\
     /install-dependencies-soapysdr.sh &&\
+    /install-dependencies-hackrf.sh &&\
     /install-dependencies-rtlsdr-soapy.sh &&\
     /install-dependencies-soapyremote.sh &&\
     /install-dependencies-perseus.sh &&\
