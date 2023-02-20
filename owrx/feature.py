@@ -428,7 +428,7 @@ class FeatureDetector(object):
     def has_wsjtx(self):
         """
         To decode FT8 and other digimodes, you need to install the WSJT-X software suite. Please check the
-        [WSJT-X homepage](https://physics.princeton.edu/pulsar/k1jt/wsjtx.html) for ready-made packages or instructions
+        [WSJT-X homepage](https://wsjt.sourceforge.io/) for ready-made packages or instructions
         on how to build from source.
         """
         return reduce(and_, map(self.command_is_runnable, ["jt9", "wsprd"]), True)
@@ -474,7 +474,7 @@ class FeatureDetector(object):
         The js8py library is used to decode binary JS8 messages into readable text. More information is available on
         [its github page](https://github.com/jketterl/js8py).
         """
-        required_version = StrictVersion("0.1")
+        required_version = StrictVersion("0.2")
         try:
             from js8py.version import strictversion
 

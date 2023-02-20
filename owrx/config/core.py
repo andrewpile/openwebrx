@@ -9,6 +9,7 @@ class CoreConfig(object):
         "core": {
             "data_directory": "/var/lib/openwebrx",
             "temporary_directory": "/tmp",
+            "log_level": "INFO",
         },
         "web": {
             "port": 8073,
@@ -34,6 +35,7 @@ class CoreConfig(object):
         CoreConfig.checkDirectory(self.data_directory, "data_directory")
         self.temporary_directory = config.get("core", "temporary_directory")
         CoreConfig.checkDirectory(self.temporary_directory, "temporary_directory")
+        self.log_level = config.get("core", "log_level")
         self.web_port = config.getint("web", "port")
         self.aprs_symbols_path = config.get("aprs", "symbols_path")
 
@@ -57,3 +59,6 @@ class CoreConfig(object):
 
     def get_aprs_symbols_path(self):
         return self.aprs_symbols_path
+
+    def get_log_level(self):
+        return self.log_level

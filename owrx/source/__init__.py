@@ -16,8 +16,10 @@ from owrx.form.input import Input, TextInput, NumberInput, CheckboxInput, ModesI
 from owrx.form.input.converter import OptionalConverter
 from owrx.form.input.device import GainInput, SchedulerInput, WaterfallLevelsInput
 from owrx.form.input.validator import RequiredValidator
+from owrx.form.input.converter import Converter
 from owrx.form.section import OptionalSection
 from owrx.feature import FeatureDetector
+from owrx.log import LogPipe, HistoryHandler
 from typing import List
 from enum import Enum
 
@@ -114,6 +116,10 @@ class SdrSource(ABC):
         self.commandMapper = None
         self.tcpSource = None
         self.buffer = None
+        self.logger = logger.getChild(id) if id is not None else logger
+        self.logger.addHandler(HistoryHandler.getHandler(self.logger.name))
+        self.stdoutPipe = None
+        self.stderrPipe = None
 
         self.props = PropertyStack()
 
@@ -185,17 +191,17 @@ class SdrSource(ABC):
         for id, p in self.props["profiles"].items():
             props.replaceLayer(0, p)
             if "center_freq" not in props:
-                logger.warning('Profile "%s" does not specify a center_freq', id)
+                self.logger.warning('Profile "%s" does not specify a center_freq', id)
                 continue
             if "samp_rate" not in props:
-                logger.warning('Profile "%s" does not specify a samp_rate', id)
+                self.logger.warning('Profile "%s" does not specify a samp_rate', id)
                 continue
             if "start_freq" in props:
                 start_freq = props["start_freq"]
                 srh = props["samp_rate"] / 2
                 center_freq = props["center_freq"]
                 if start_freq < center_freq - srh or start_freq > center_freq + srh:
-                    logger.warning('start_freq for profile "%s" is out of range', id)
+                    self.logger.warning('start_freq for profile "%s" is out of range', id)
 
     def isAlwaysOn(self):
         return "always-on" in self.props and self.props["always-on"]
@@ -225,11 +231,12 @@ class SdrSource(ABC):
         return [self.getCommandMapper().map(self.getCommandValues())]
 
     def activateProfile(self, profile_id):
-        logger.debug("activating profile {0} for {1}".format(profile_id, self.getId()))
         try:
+            profile_name = self.getProfiles()[profile_id]["name"]
+            self.logger.debug("activating profile \"%s\" for \"%s\"", profile_name, self.getName())
             self.profileCarousel.switch(profile_id)
         except KeyError:
-            logger.warning("invalid profile %s for sdr %s. ignoring", profile_id, self.getId())
+            self.logger.warning("invalid profile %s for sdr %s. ignoring", profile_id, self.getId())
 
     def getId(self):
         return self.id
@@ -283,23 +290,37 @@ class SdrSource(ABC):
             try:
                 self.preStart()
             except Exception:
-                logger.exception("Exception during preStart()")
+                self.logger.exception("Exception during preStart()")
 
             cmd = self.getCommand()
             cmd = [c for c in cmd if c is not None]
+
+            self.stdoutPipe = LogPipe(logging.INFO, self.logger, "STDOUT")
+            self.stderrPipe = LogPipe(logging.WARNING, self.logger, "STDERR")
 
             # don't use shell mode for commands without piping
             if len(cmd) > 1:
                 # multiple commands with pipes
                 cmd = "|".join(cmd)
-                self.process = subprocess.Popen(cmd, shell=True, start_new_session=True)
+                self.process = subprocess.Popen(
+                    cmd,
+                    shell=True,
+                    start_new_session=True,
+                    stdout=self.stdoutPipe,
+                    stderr=self.stderrPipe
+                )
             else:
                 # single command
                 cmd = cmd[0]
                 # start_new_session can go as soon as there's no piped commands left
                 # the os.killpg call must be replaced with something more reasonable at the same time
-                self.process = subprocess.Popen(shlex.split(cmd), start_new_session=True)
-            logger.info("Started sdr source: " + cmd)
+                self.process = subprocess.Popen(
+                    shlex.split(cmd),
+                    start_new_session=True,
+                    stdout=self.stdoutPipe,
+                    stderr=self.stderrPipe
+                )
+            self.logger.info("Started sdr source: " + cmd)
 
             available = False
             failed = False
@@ -307,9 +328,13 @@ class SdrSource(ABC):
             def wait_for_process_to_end():
                 nonlocal failed
                 rc = self.process.wait()
-                logger.debug("shut down with RC={0}".format(rc))
+                self.logger.debug("shut down with RC={0}".format(rc))
                 self.process = None
                 self.monitor = None
+                self.stdoutPipe.close()
+                self.stdoutPipe = None
+                self.stderrPipe.close()
+                self.stderrPipe = None
                 if self.getState() is SdrSourceState.RUNNING:
                     self.fail()
                 else:
@@ -340,7 +365,7 @@ class SdrSource(ABC):
             try:
                 self.postStart()
             except Exception:
-                logger.exception("Exception during postStart()")
+                self.logger.exception("Exception during postStart()")
                 failed = True
 
         if failed:
@@ -374,7 +399,7 @@ class SdrSource(ABC):
                         self.monitor.join(10)
                         # if the monitor is still running, the process still hasn't ended, so kill it
                     if self.monitor:
-                        logger.warning("source has not shut down normally within 10 seconds, sending SIGKILL")
+                        self.logger.warning("source has not shut down normally within 10 seconds, sending SIGKILL")
                         os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
                 except ProcessLookupError:
                     # been killed by something else, ignore
@@ -482,6 +507,32 @@ class SdrDeviceDescriptionMissing(Exception):
     pass
 
 
+class SdrDeviceTypeConverter(Converter):
+    def convert_to_form(self, value):
+        # local import due to circular dependendies
+        types = SdrDeviceDescription.getTypes()
+        if value in types:
+            return types[value]
+        return value
+
+    def convert_from_form(self, value):
+        return None
+
+
+class SdrDeviceTypeDisplay(Input):
+    """
+    Not an input per se, just an element that can display the SDR device type in the web config
+    """
+    def __init__(self, id, label):
+        super().__init__(id, label, disabled=True)
+
+    def defaultConverter(self):
+        return SdrDeviceTypeConverter()
+
+    def parse(self, data):
+        return {}
+
+
 class SdrDeviceDescription(object):
     @staticmethod
     def getByType(sdr_type: str) -> "SdrDeviceDescription":
@@ -539,6 +590,7 @@ class SdrDeviceDescription(object):
 
     def getInputs(self) -> List[Input]:
         return [
+            SdrDeviceTypeDisplay("type", "Device type"),
             CheckboxInput("enabled", "Enable this device", converter=OptionalConverter(defaultFormValue=True)),
             GainInput("rf_gain", "Device gain", self.hasAgc()),
             NumberInput(
@@ -576,7 +628,7 @@ class SdrDeviceDescription(object):
         return True
 
     def getDeviceMandatoryKeys(self):
-        return ["name", "enabled"]
+        return ["name", "type", "enabled"]
 
     def getDeviceOptionalKeys(self):
         keys = [
